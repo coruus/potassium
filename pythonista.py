@@ -123,7 +123,7 @@ def curve25519_aes_ctr_hmac_sha512_encrypt(recipient_key, message):
   nonce = urandom(32)
   authkey, enckey = kdf_sha512(shared_secret, nonce)
   cipher = AES.new(enckey, mode=AES.MODE_CTR, counter=Counter.new(128))
-  ciphertext = cipher.encrypt(message)
+  ciphertext = cipher.encrypt(message + '\x81')
   mac = HMAC(authkey, ciphertext, digestmod=sha512).digest()
   return b64e(''.join([nonce, e_pk, ciphertext, mac]))
 
@@ -143,7 +143,7 @@ def curve25519_aes_ctr_hmac_sha512_decrypt(secret_key, message):
   if computed_mac != mac:
       return None
   cipher = AES.new(enckey, mode=AES.MODE_CTR, counter=Counter.new(128))
-  plaintext = cipher.decrypt(ciphertext)
+  plaintext = cipher.decrypt(ciphertext)[:-1]
   return plaintext
 
 keypair = curve25519_new_keypair
@@ -159,13 +159,13 @@ def test_encdec(message='this is a test of a short message'):
 
 
 def write_keypair(filename='id_curve25519'):
-    sk, pk = keypair()
-    if exists(filename):
-      print("%s exists. Not overwriting".format(filename))
-    with open(filename, 'wb') as f:
-      f.write(sk)
-    with open(filename + '.pub', 'wb') as f:
-     f.write(pk)
+  sk, pk = keypair()
+  if exists(filename):
+    print("%s exists. Not overwriting".format(filename))
+  with open(filename, 'wb') as f:
+    f.write(sk)
+  with open(filename + '.pub', 'wb') as f:
+   f.write(pk)
 
 
 def decrypt_withkeyfile(message, filename='id_curve25519'):
