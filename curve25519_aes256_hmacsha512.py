@@ -1,3 +1,20 @@
+"""A randomized authenticated encryption mode using the encrypt-then-MAC
+   construction, using deniable key exchange on djb's Curve25519.
+
+   It is primarily intended for use with Pythonista on iOS, which supports
+   AES encryption via PyCrypto; it does work, however, with any version
+   of Python.
+
+   The code for scalar multiplication using a Montgomery ladder is based
+   on Matt Dempsey's, in the NaCl crypto paper.
+
+   Note that no provisions for defense against side-channel attacks have been
+   made. It is assumed that this code will be used interactively; it is unsafe
+   for automated use.
+
+   License: CC0 with attribution kindly requested
+"""
+
 from __future__ import division, print_function
 
 from base64 import urlsafe_b64encode as b64e
@@ -11,6 +28,8 @@ from os.path import exists
 from Crypto.PublicKey.pubkey import bytes_to_long, long_to_bytes
 from Crypto.Cipher import AES
 from Crypto.Util import Counter
+
+# TODO(dlg): Use bytes_to_long and long_to_bytes
 
 #--Curve25519--
 
@@ -58,16 +77,19 @@ def curve25519(n, base):
   ((x,z), _) = f(n)
   return (x * inv(z)) % P
 
+
 def unpack(s):
   if len(s) != 32:
     raise ValueError("Invalid Curve25519 argument")
   return sum(ord(s[i]) << (8 * i) for i in range(32))
+
 
 def pack(n):
   return "".join([chr((n >> (8 * i)) & 255) for i in range(32)])
 
 
 def clamp(n):
+  """Clamp a public key on Curve25519"""
   n &= ~7
   n &= ~(128 << 8 * 31)
   n |= 64 << 8 * 31
@@ -79,36 +101,44 @@ def crypto_scalarmult_curve25519(n, p):
   p = unpack(p)
   return pack(curve25519(n, p))
 
+
 def crypto_scalarmult_curve25519_base(n):
-    n = clamp(unpack(n))
-    return pack(curve25519(n, 9))
+  n = clamp(unpack(n))
+  return pack(curve25519(n, 9))
+
 
 def test_curve25519():
-     sk=[0x77,0x07,0x6d,0x0a,0x73,0x18,0xa5,0x7d
-        ,0x3c,0x16,0xc1,0x72,0x51,0xb2,0x66,0x45
-        ,0xdf,0x4c,0x2f,0x87,0xeb,0xc0,0x99,0x2a
-        ,0xb1,0x77,0xfb,0xa5,0x1d,0xb9,0x2c,0x2a]
-     n="".join([chr(sk[i]) for i in range(32)])
-     pk=[0x85,0x20,0xf0,0x09,0x89,0x30,0xa7,0x54
-        ,0x74,0x8b,0x7d,0xdc,0xb4,0x3e,0xf7,0x5a
-        ,0x0d,0xbf,0x3a,0x0d,0x26,0x38,0x1a,0xf4
-        ,0xeb,0xa4,0xa9,0x8e,0xaa,0x9b,0x4e,0x6a]
-     s="".join([chr(pk[i]) for i in range(32)])
-     print (s == crypto_scalarmult_curve25519_base(n))
+  """Test Curve25519 scalar multiplication. Test-vector from naclcrypto"""
+  sk = [0x77, 0x07, 0x6d, 0x0a, 0x73, 0x18, 0xa5, 0x7d, 0x3c, 0x16, 0xc1, 0x72,
+        0x51, 0xb2, 0x66, 0x45, 0xdf, 0x4c, 0x2f, 0x87, 0xeb, 0xc0, 0x99, 0x2a,
+        0xb1, 0x77, 0xfb, 0xa5, 0x1d, 0xb9, 0x2c, 0x2a]
+  n = "".join([chr(sk[i]) for i in range(32)])
+  pk = [0x85, 0x20, 0xf0, 0x09, 0x89, 0x30, 0xa7, 0x54, 0x74, 0x8b, 0x7d, 0xdc,
+        0xb4, 0x3e, 0xf7, 0x5a, 0x0d, 0xbf, 0x3a, 0x0d, 0x26, 0x38, 0x1a, 0xf4,
+        0xeb, 0xa4, 0xa9, 0x8e, 0xaa, 0x9b, 0x4e, 0x6a]
+  s = "".join([chr(pk[i]) for i in range(32)])
+  return s == crypto_scalarmult_curve25519_base(n)
 
 
 def curve25519_random_keypair():
-    sk = urandom(32)
-    pk = crypto_scalarmult_curve25519_base(sk)
-    return sk, pk
+  """Generate a random Curve25519 keypair"""
+  sk = urandom(32)
+  pk = crypto_scalarmult_curve25519_base(sk)
+  return sk, pk
+
 
 def curve25519_new_keypair():
-    sk, pk = curve25519_random_keypair()
-    return b64e(sk), b64e(pk)
+  """Generate a base64-encoded Curve25519 keypair"""
+  sk, pk = curve25519_random_keypair()
+  return b64e(sk), b64e(pk)
+
+
+#--Curve25519-KDF(HMAC-SHA512)-AES256-CTR-HMAC-SHA512--
 
 def kdf_sha512(key, message):
-    key = HMAC(key, msg=message, digestmod=sha512).digest()
-    return key[:32], key[32:]
+  """Derive two 32-byte keys using HMAC-SHA512"""
+  key = HMAC(key, msg=message, digestmod=sha512).digest()
+  return key[:32], key[32:]
 
 
 def curve25519_aes_ctr_hmac_sha512_encrypt(recipient_key, message):
@@ -146,6 +176,7 @@ def curve25519_aes_ctr_hmac_sha512_decrypt(secret_key, message):
   plaintext = cipher.decrypt(ciphertext)[:-1]
   return plaintext
 
+
 keypair = curve25519_new_keypair
 encrypt = curve25519_aes_ctr_hmac_sha512_encrypt
 decrypt = curve25519_aes_ctr_hmac_sha512_decrypt
@@ -172,3 +203,8 @@ def decrypt_withkeyfile(message, filename='id_curve25519'):
   with open(filename, 'rb') as f:
     sk = f.read()
   return decrypt(sk, message)
+
+
+#--test things are working right--
+assert test_curve25519() == True
+assert test_encdec() == True

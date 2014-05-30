@@ -166,3 +166,5 @@ _testmain.go
 *.test
 
 
+id_curve25519
+id_curve25519.pub
