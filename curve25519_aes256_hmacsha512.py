@@ -29,6 +29,8 @@ from Crypto.PublicKey.pubkey import bytes_to_long, long_to_bytes
 from Crypto.Cipher import AES
 from Crypto.Util import Counter
 
+from expad import pad, unpad
+
 # TODO(dlg): Use bytes_to_long and long_to_bytes
 
 #--Curve25519--
@@ -153,7 +155,7 @@ def curve25519_aes_ctr_hmac_sha512_encrypt(recipient_key, message):
   nonce = urandom(32)
   authkey, enckey = kdf_sha512(shared_secret, nonce)
   cipher = AES.new(enckey, mode=AES.MODE_CTR, counter=Counter.new(128))
-  ciphertext = cipher.encrypt(message + '\x81')
+  ciphertext = cipher.encrypt(pad(message))
   mac = HMAC(authkey, ciphertext, digestmod=sha512).digest()
   return b64e(''.join([nonce, e_pk, ciphertext, mac]))
 
@@ -173,7 +175,7 @@ def curve25519_aes_ctr_hmac_sha512_decrypt(secret_key, message):
   if computed_mac != mac:
       return None
   cipher = AES.new(enckey, mode=AES.MODE_CTR, counter=Counter.new(128))
-  plaintext = cipher.decrypt(ciphertext)[:-1]
+  plaintext = unpad(cipher.decrypt(ciphertext))
   return plaintext
 
 
