@@ -12,7 +12,7 @@ To generate a keypair for yourself, do
 
     write_keypair()
 
-Send `id_curve25519.pub` to whomever you want to message you.
+Send `k_curve25519.pub` to whomever you want to message you.
 
 To encrypt a message to a recipient, do
 
@@ -22,6 +22,8 @@ To decrypt a message encrypted under your public key, using a key saved
 in a keyfile, do
 
     decrypt_withkeyfile(encrypted_message)
+
+The public keys are just plain base64 files.
 
 ## Encryption mode summary
 
@@ -37,6 +39,9 @@ included, so messages using this version are future-compatible.
 
 The Curve25519 implementation in pure Python is directly adapted from
 djb's naclcrypto-20090310 spec.
+
+(The Montgomery ladder routine has been converted to imperative form
+to avoid running out of stack-space on some Pythonista builds.)
 
 `encrypt` generates an ephemeral keypair, derives an AES key and an HMAC
 key, and encrypts and authenticates a message.
